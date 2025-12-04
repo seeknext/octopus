@@ -1,18 +1,13 @@
 package cmd
 
 import (
-	"fmt"
-	"net/http"
-
 	"github.com/bestruirui/octopus/internal/conf"
 	"github.com/bestruirui/octopus/internal/db"
 	"github.com/bestruirui/octopus/internal/op"
-	_ "github.com/bestruirui/octopus/internal/server/handlers"
-	"github.com/bestruirui/octopus/internal/server/middleware"
-	"github.com/bestruirui/octopus/internal/server/router"
+	"github.com/bestruirui/octopus/internal/server"
+	"github.com/bestruirui/octopus/internal/task"
 	"github.com/bestruirui/octopus/internal/utils/log"
 	"github.com/bestruirui/octopus/internal/utils/shutdown"
-	"github.com/gin-gonic/gin"
 	"github.com/spf13/cobra"
 )
 
@@ -28,29 +23,6 @@ var startCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		sd := shutdown.New(log.Logger)
 		defer sd.Listen()
-
-		if conf.IsDebug() {
-			gin.SetMode(gin.DebugMode)
-		} else {
-			gin.SetMode(gin.ReleaseMode)
-		}
-
-		r := gin.New()
-
-		r.Use(middleware.Cors())
-		r.Use(middleware.Logger())
-		r.Use(middleware.StaticLocal("/", "static"))
-
-		router.RegisterAll(r)
-
-		httpSrv := &http.Server{Addr: fmt.Sprintf("%s:%d", conf.AppConfig.Server.Host, conf.AppConfig.Server.Port), Handler: r}
-		go func() {
-			if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.Errorf("http server listen and serve error: %v", err)
-			}
-		}()
-		sd.Register(httpSrv.Close)
-
 		if err := db.InitDB(conf.AppConfig.Database.Path, conf.IsDebug()); err != nil {
 			log.Errorf("database init error: %v", err)
 			return
@@ -67,6 +39,14 @@ var startCmd = &cobra.Command{
 			log.Errorf("user init error: %v", err)
 			return
 		}
+
+		if err := server.Start(); err != nil {
+			log.Errorf("server start error: %v", err)
+			return
+		}
+		sd.Register(server.Close)
+
+		go task.RUN()
 	},
 }
 

@@ -1,15 +1,20 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/bestruirui/octopus/internal/client"
 	"github.com/bestruirui/octopus/internal/model"
 	"github.com/bestruirui/octopus/internal/op"
+	"github.com/bestruirui/octopus/internal/price"
 	"github.com/bestruirui/octopus/internal/server/middleware"
 	"github.com/bestruirui/octopus/internal/server/resp"
 	"github.com/bestruirui/octopus/internal/server/router"
+	"github.com/bestruirui/octopus/internal/utils/log"
 	"github.com/gin-gonic/gin"
 )
 
@@ -63,6 +68,30 @@ func createChannel(c *gin.Context) {
 	}
 	stats := op.StatsChannelGet(channel.ID)
 	channel.Stats = &stats
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		modelNames := strings.Split(channel.Model, ",")
+		for _, modelName := range modelNames {
+			log.Infof("fetch model price: %s", modelName)
+			_, err := price.GetLLMPrice(modelName)
+			if err != nil {
+				log.Infof("create model: %s", modelName)
+				err = op.LLMCreate(
+					model.LLMInfo{
+						Name: modelName,
+						LLMPrice: model.LLMPrice{
+							Input:  0,
+							Output: 0,
+						}},
+					ctx,
+				)
+				if err != nil {
+					log.Errorf("create model: %s", modelName)
+				}
+			}
+		}
+	}()
 	resp.Success(c, channel)
 }
 
@@ -100,7 +129,7 @@ func fetchModel(c *gin.Context) {
 		resp.Error(c, http.StatusBadRequest, resp.ErrInvalidJSON)
 		return
 	}
-	models, err := client.FetchModel(c.Request.Context(), request)
+	models, err := client.FetchLLMName(c.Request.Context(), request)
 	if err != nil {
 		resp.Error(c, http.StatusInternalServerError, err.Error())
 		return
