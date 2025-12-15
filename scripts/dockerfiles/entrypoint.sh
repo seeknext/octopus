@@ -13,12 +13,12 @@ fi
 cd /app
 
 if command -v su-exec >/dev/null 2>&1; then
-    exec su-exec "$PUID:$PGID" ./octopus start --config data/config.json
+    exec su-exec "$PUID:$PGID" ./octopus start
 elif command -v gosu >/dev/null 2>&1; then
-    exec gosu "$PUID:$PGID" ./octopus start --config data/config.json
+    exec gosu "$PUID:$PGID" ./octopus start
 else
     if [ "$PUID" != "0" ] || [ "$PGID" != "0" ]; then
         echo "Warning: neither su-exec nor gosu is available; running as root." >&2
     fi
-    exec ./octopus start --config data/config.json
+    exec ./octopus start
 fi
