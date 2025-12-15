@@ -6,7 +6,6 @@ import (
 	"github.com/bestruirui/octopus/internal/model"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
-
 	"gorm.io/gorm/logger"
 )
 
