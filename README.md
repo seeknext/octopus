@@ -35,7 +35,7 @@ docker run -d --name octopus -v /path/to/data:/app/data -p 8080:8080 bestrui/oct
 Or use docker compose:
 
 ```bash
-wget https://raw.githubusercontent.com/bestruirui/octopus/refs/heads/dev/docker-compose.yml
+wget https://raw.githubusercontent.com/bestruirui/octopus/refs/heads/master/docker-compose.yml
 docker compose up -d
 ```
 
