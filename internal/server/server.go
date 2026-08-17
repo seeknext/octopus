@@ -9,8 +9,8 @@ import (
 	"github.com/bestruirui/octopus/internal/server/middleware"
 	"github.com/bestruirui/octopus/internal/server/resp"
 	"github.com/bestruirui/octopus/internal/server/router"
-	"github.com/bestruirui/octopus/internal/utils/log"
 	"github.com/bestruirui/octopus/static"
+	"github.com/charmbracelet/log"
 	"github.com/gin-gonic/gin"
 )
 

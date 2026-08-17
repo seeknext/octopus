@@ -336,20 +336,25 @@ Edit `~/.claude/settings.json`
 Edit `~/.codex/config.toml`
 
 ```toml
-model = "octopus-codex" # Use the correct group name
-
+model = "gpt-5.6-sol"
+model_reasoning_effort = "xhigh"
 model_provider = "octopus"
+preferred_auth_method = "apikey"
 
 [model_providers.octopus]
-name = "octopus"
 base_url = "http://127.0.0.1:8080/v1"
+name = "octopus"
+supports_websockets = false
+requires_openai_auth = true
+wire_api = "responses"
+experimental_bearer_token = "sk-octopus-"
 ```
 
 Edit `~/.codex/auth.json`
 
 ```json
 {
-  "OPENAI_API_KEY": "sk-octopus-P48ROljwJmWBYVARjwQM8Nkiezlg7WOrXXOWDYY8TI5p9Mzg"
+  "OPENAI_API_KEY": ""
 }
 ```
 
