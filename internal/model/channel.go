@@ -29,6 +29,7 @@ type ChannelConfig struct {
 	Name                     string         `json:"name" gorm:"unique;not null"`                                                                        // 渠道名称。
 	Dialect                  Dialect        `json:"dialect" gorm:"not null;default:generic"`                                                            // 上游方言, 决定出站转换器的厂商特化配置。
 	Enabled                  bool           `json:"enabled" gorm:"default:true"`                                                                        // 渠道是否可用。
+	KeyRoundRobin            bool           `json:"key_round_robin" gorm:"default:false"`                                                               // 是否在多个 Key 之间轮询。
 	BaseURL                  string         `json:"base_url"`                                                                                           // 上游地址, 各协议共用。
 	OpenAIChatCompletionPath string         `json:"openai_chat_completion_path" gorm:"column:openai_chat_completion_path;default:/v1/chat/completions"` // OpenAI Chat Completions 请求路径; 留空由后端填默认路径。
 	OpenAIResponsePath       string         `json:"openai_response_path" gorm:"column:openai_response_path;default:/v1/responses"`                      // OpenAI Responses 请求路径; 留空由后端填默认路径。

@@ -61,6 +61,7 @@ export type ChannelDetail = {
     name: string;
     dialect: Dialect;
     enabled: boolean;
+    key_round_robin: boolean;
     base_url: string; // 上游地址，各协议共用。
     openai_chat_completion_path: string;
     openai_response_path: string;

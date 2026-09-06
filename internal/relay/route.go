@@ -2,7 +2,9 @@ package relay
 
 import (
 	"maps"
+	"math/rand"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/bestruirui/octopus/internal/model"
@@ -26,9 +28,10 @@ type RouteState struct {
 const routeStreamBuffer = 16 // 单个路由流连接的非阻塞消息缓冲容量。
 
 var (
-	routeMu      sync.Mutex                           // routeMu 保护全部分组路由状态。
-	routes       = make(map[int]*RouteState)          // routes 按分组 ID 保存路由状态。
-	routeStreams = make(map[chan RouteState]struct{}) // 全部路由 SSE 连接。
+	roundRobinCounter uint64                     // roundRobinCounter 轮询模式的全局计数器。
+	routeMu           sync.Mutex                 // routeMu 保护全部分组路由状态。
+	routes            = make(map[int]*RouteState) // routes 按分组 ID 保存路由状态。
+	routeStreams       = make(map[chan RouteState]struct{}) // 全部路由 SSE 连接。
 )
 
 // RouteStateOf 返回分组当前的实时路由状态, 供读取接口随分组一并返回。
@@ -66,6 +69,7 @@ func ResetRouteState(groupID int) {
 // pickGroupItem 按分组模式选择本轮目标成员, 没有可用成员时返回零值; group.Items 已按 Priority 升序排列。
 // 渠道是否可用不在此判断: 渠道禁用或缺少密钥由调用方发现并作为一轮失败上报, 该成员随即进入冷却而在后续轮次被跳过。
 func pickGroupItem(group model.Group) model.GroupItem {
+	// 手动模式取人工指定的成员。
 	if group.Mode == model.GroupModeManual {
 		for _, item := range group.Items {
 			if item.ID == group.ActiveItemID {
@@ -74,6 +78,68 @@ func pickGroupItem(group model.Group) model.GroupItem {
 		}
 		return model.GroupItem{}
 	}
+
+	// 轮询模式：依次循环选择渠道，失败的渠道由调用方通过冷却机制跳过。
+	if group.Mode == model.GroupModeRoundRobin {
+		if len(group.Items) == 0 {
+			return model.GroupItem{}
+		}
+
+		routeMu.Lock()
+		defer routeMu.Unlock()
+		route := groupRouteLocked(group)
+		now := time.Now().UnixMilli()
+
+		// 轮询遍历所有成员，跳过冷却中的成员。
+		for i := 0; i < len(group.Items); i++ {
+			idx := int(atomic.AddUint64(&roundRobinCounter, 1)) % len(group.Items)
+			item := group.Items[idx]
+			deadline, cooling := route.Cooldowns[item.ID]
+			if cooling && deadline > now {
+				continue
+			}
+			route.CurrentItemID = item.ID
+			publishRouteLocked(route)
+			return item
+		}
+		// 所有成员都在冷却中，沿用当前成员。
+		if route.CurrentItemID != 0 {
+			return itemOf(group, route.CurrentItemID)
+		}
+		return model.GroupItem{}
+	}
+
+	// 随机模式：每次随机选择一个渠道，失败的渠道由调用方通过冷却机制跳过。
+	if group.Mode == model.GroupModeRandom {
+		if len(group.Items) == 0 {
+			return model.GroupItem{}
+		}
+
+		routeMu.Lock()
+		defer routeMu.Unlock()
+		route := groupRouteLocked(group)
+		now := time.Now().UnixMilli()
+
+		// 随机遍历，跳过冷却中的成员。
+		for attempt := 0; attempt < len(group.Items); attempt++ {
+			idx := rand.Intn(len(group.Items))
+			item := group.Items[idx]
+			deadline, cooling := route.Cooldowns[item.ID]
+			if cooling && deadline > now {
+				continue
+			}
+			route.CurrentItemID = item.ID
+			publishRouteLocked(route)
+			return item
+		}
+		// 所有成员都在冷却中，沿用当前成员。
+		if route.CurrentItemID != 0 {
+			return itemOf(group, route.CurrentItemID)
+		}
+		return model.GroupItem{}
+	}
+
+	// 故障转移模式：按优先级选择并在失败时切换。
 
 	routeMu.Lock()
 	defer routeMu.Unlock()

@@ -141,7 +141,8 @@ func importDB(c *gin.Context) {
 			dump.Groups[i].Mode = model.GroupModeManual
 		}
 		model.NormalizeGroupRelayConfig(&dump.Groups[i].RelayConfig)
-		if dump.Groups[i].Mode != model.GroupModeManual && dump.Groups[i].Mode != model.GroupModeFailover {
+		if dump.Groups[i].Mode != model.GroupModeManual && dump.Groups[i].Mode != model.GroupModeFailover &&
+			dump.Groups[i].Mode != model.GroupModeRoundRobin && dump.Groups[i].Mode != model.GroupModeRandom {
 			resp.Error(c, http.StatusBadRequest, "invalid group relay mode")
 			return
 		}
