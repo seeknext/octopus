@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"slices"
-	"sync/atomic"
 	"time"
 
 	"github.com/bestruirui/octopus/internal/model"
@@ -23,8 +22,6 @@ import (
 	"github.com/looplj/axonhub/llm/transformer/openai/responses"
 	"github.com/tidwall/sjson"
 )
-
-var keyRoundRobinCounter uint64
 
 // Forward 按客户端协议承载一个请求的完整转发过程: 解析请求, 定位分组, 循环选目标请求上游, 直至提交响应或请求结束。
 func Forward(format llm.APIFormat) gin.HandlerFunc {
@@ -126,14 +123,6 @@ func Forward(format llm.APIFormat) gin.HandlerFunc {
 					return
 				}
 				continue
-			}
-
-			// 渠道开启 Key 轮询时, 从该渠道的所有启用 Key 中依次轮询选择。
-			if channel.KeyRoundRobin {
-				if keys := op.ChannelKeysEnabled(channel.ID); len(keys) > 1 {
-					idx := int(atomic.AddUint64(&keyRoundRobinCounter, 1)) % len(keys)
-					channelKey = &keys[idx]
-				}
 			}
 
 			// 将分组成员配置的真实模型写入本轮上游请求。

@@ -8,7 +8,6 @@ export type ChannelFormState = {
     base_url: string;
     enabled: boolean;
     proxy: boolean;
-    key_round_robin: boolean;
     openai_chat_completion_path: string;
     openai_response_path: string;
     anthropic_message_path: string;
@@ -32,7 +31,6 @@ export const emptyFormState: ChannelFormState = {
     base_url: '',
     enabled: true,
     proxy: false,
-    key_round_robin: false,
     openai_chat_completion_path: '/v1/chat/completions',
     openai_response_path: '/v1/responses',
     anthropic_message_path: '/v1/messages',
@@ -53,7 +51,6 @@ export function fromChannel(channel: ChannelDetail): ChannelFormState {
         base_url: channel.base_url,
         enabled: channel.enabled,
         proxy: channel.proxy,
-        key_round_robin: channel.key_round_robin ?? false,
         openai_chat_completion_path: channel.openai_chat_completion_path,
         openai_response_path: channel.openai_response_path,
         anthropic_message_path: channel.anthropic_message_path,
@@ -74,7 +71,6 @@ export function toChannelConfig(state: ChannelFormState) {
         name: state.name.trim(),
         dialect: state.dialect,
         enabled: state.enabled,
-        key_round_robin: state.key_round_robin,
         base_url: state.base_url.trim(),
         openai_chat_completion_path: state.openai_chat_completion_path.trim(),
         openai_response_path: state.openai_response_path.trim(),

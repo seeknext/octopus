@@ -458,7 +458,6 @@
             "apiKey": "API Key",
             "enabled": "启用",
             "proxy": "使用代理",
-            "keyRoundRobin": "Key 轮询",
             "keys": "凭据",
             "keyAdd": "添加凭据",
             "keyName": "名称",

@@ -458,7 +458,6 @@
             "apiKey": "API Key",
             "enabled": "Enabled",
             "proxy": "Use proxy",
-            "keyRoundRobin": "Key round-robin",
             "keys": "Credentials",
             "keyAdd": "Add credential",
             "keyName": "Name",

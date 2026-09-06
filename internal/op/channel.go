@@ -285,17 +285,6 @@ func ChannelGet(id int) (model.Channel, error) {
 	return channel, nil
 }
 
-// ChannelKeysEnabled 返回指定渠道下所有启用的凭据, 供 Key 轮询选择。
-func ChannelKeysEnabled(channelID int) []model.ChannelKey {
-	keys := make([]model.ChannelKey, 0)
-	for _, key := range channelKeyCache.GetAll() {
-		if key.ChannelID == channelID && key.Enabled {
-			keys = append(keys, key)
-		}
-	}
-	return keys
-}
-
 // ChannelGrantGet 返回可用于转发的渠道授权, 并补齐其模型与凭据。
 // 凭据被停用, 以及模型, 凭据缺失时一律返回错误, 使调用方拿到的授权必然可直接转发, 无需再逐项检查。
 // 授权本身没有停用状态: 不再授权就删掉该组合, 无需保留一行停用记录。
