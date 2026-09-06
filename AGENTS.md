@@ -35,6 +35,21 @@
 |------|------|
 | `Dockerfile` | 多阶段构建：node 前端 → go 后端 → scratch 导出。GOPROXY 使用 goproxy.cn |
 
+### 5. 日志详情面板展示（本仓库另一次定制）
+
+> 背景：round_robin/random 模式下，日志详情左侧 Group 面板原来高亮 `runtime.current_item_id`
+> （分组全局当前路由成员），会被其它并发请求随时翻动，导致与日志卡片渠道不一致。
+
+| 文件 | 修改内容 |
+|------|----------|
+| `web/src/components/modules/log/Item.tsx` | 日志详情左侧 Group 面板高亮改为按日志自身渠道匹配（`item.channel_name === log.target_channel && item.model_name === log.target_model`），不再依赖分组实时路由状态；成员按钮全部禁用（移除手动切换渠道功能）；命中的成员显示"本次请求"标签 |
+| `web/src/locales/en.json` | 新增 `"thisRequestChannel": "This Request"` |
+| `web/src/locales/zh_hans.json` | 新增 `"thisRequestChannel": "本次请求"` |
+| `web/src/locales/zh_hant.json` | 新增 `"thisRequestChannel": "本次請求"` |
+
+> 注意：该改动同时删除了 LogDetail 中基于 `runtime.current_item_id`/`switchingItemId` 的高亮
+> 与切换逻辑，并清理了 `useUpdateGroup`、`switchingItemId` 等不再使用的状态。
+
 ## 架构说明
 
 ### Group 分发流程
@@ -59,6 +74,12 @@
    - 使用 `goproxy.cn` 加速国内 Go 模块下载
    - 前端输出到 `static/out`（vite outDir 配置）
    - Go embed 通过 `static/static.go` 的 `//go:embed all:out` 嵌入
+
+3. **日志详情展示（渠道/模型一致性）**：
+   - 日志详情左侧 Group 面板高亮一律按 `log.target_channel` + `log.target_model` 反查成员
+   - 不再依赖 `runtime.current_item_id`（全局滚动游标，与单条日志无关）
+   - 不提供手动切换渠道功能（不需要）
+   - `thisRequestChannel` 标签用于区分命中的成员
 
 ## 如何修改
 
@@ -90,3 +111,4 @@
 
 - 版本号显示 `dev`/`unknown`（cosmetic only，不影响功能）
 - Docker Hub 连接可能超时，需要手动 pull 镜像
+- 日志详情重试轮次（rounds）不完整：`RequestState` 是单快照结构，每轮 `startRound`/`finishRound` 覆盖同一份字段，中间轮次历史不保留；且前端 rounds 累积逻辑（`Item.tsx` 中 `!log.sending && current.every(...)`）会丢弃已结束且未观察到的新轮次。所有渠道限流快速切换时，日志详情看不到每轮切换记录。这是原始项目（v0.13.2）就存在的问题，非本仓库修改引入；若要修复需后端补轮次历史（对齐旧版 v0.9.x 的 `attempts` 数组）

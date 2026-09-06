@@ -173,7 +173,6 @@ function LogDetail({ log, now }: { log: RelayLogOverview; now: number }) {
     const responseCommitted = log.status === 'committed';
     const showRounds = log.status === 'running' || (requestFailed && rounds.length > 0);
     const isWaitingForSelection = log.status === 'running' && !log.sending && activeGroup?.mode === 'manual' && activeGroup.runtime.current_item_id === 0; // isWaitingForSelection 表示手动模式请求正等待选择渠道。
-
     // 让弹窗先完成展开动画, 避免详情请求及其状态更新占用动画起步帧。
     useEffect(() => {
         const timer = window.setTimeout(() => setDetailReady(true), 600);
@@ -274,31 +273,13 @@ function LogDetail({ log, now }: { log: RelayLogOverview; now: number }) {
                                 <div className="divide-y divide-border">
                                     {activeGroup.items.map((item) => {
                                         const { Icon: ItemIcon, className: itemIconClassName } = getModelIcon(item.model_name);
-                                        const itemCurrent = switchingItemId !== null
-                                            ? item.id === switchingItemId
-                                            : activeGroup.runtime.current_item_id === item.id;
+                                        const itemCurrent = item.channel_name === log.target_channel && item.model_name === log.target_model;
                                         return (
                                             <button
                                                 key={item.id}
                                                 type="button"
                                                 aria-pressed={itemCurrent}
-                                                disabled={activeGroup.mode === 'failover' || switchingItemId !== null || stopRound.isPending}
-                                                onClick={async () => {
-                                                    if (activeGroup.mode === 'failover') return;
-                                                    setSwitchingItemId(item.id);
-                                                    const isCurrent = activeGroup.runtime.current_item_id === item.id;
-                                                    try {
-                                                        await updateActiveItem.mutateAsync({ id: activeGroup.id, active_item_id: isCurrent ? 0 : item.id });
-                                                        if (log.sending) {
-                                                            await stopRound.mutateAsync({ requestId: log.id, round: log.round });
-                                                        }
-                                                        toast.success(isCurrent ? t('channelCleared') : t('channelChanged'));
-                                                    } catch (cause) {
-                                                        toast.error(t('channelChangeFailed'), { description: cause instanceof Error ? cause.message : undefined });
-                                                    } finally {
-                                                        setSwitchingItemId(null);
-                                                    }
-                                                }}
+                                                disabled
                                                 className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-xs transition-colors hover:bg-muted/50 disabled:cursor-default disabled:hover:bg-transparent"
                                             >
                                                 <ItemIcon aria-hidden="true" className={itemIconClassName} width={20} height={20} />
@@ -311,6 +292,11 @@ function LogDetail({ log, now }: { log: RelayLogOverview; now: number }) {
                                                     </span>
                                                 </span>
                                                 <MemberStatus group={activeGroup} itemId={item.id} now={now} active={itemCurrent} />
+                                                {itemCurrent && (
+                                                    <span className="shrink-0 rounded px-1 py-px text-[10px] font-medium text-primary bg-primary/10">
+                                                        {t('thisRequestChannel')}
+                                                    </span>
+                                                )}
                                             </button>
                                         );
                                     })}

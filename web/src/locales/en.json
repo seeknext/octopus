@@ -417,7 +417,8 @@
             "stopFailed": "Failed to stop current round",
             "waitingChannelSelection": "Waiting for channel selection",
             "waitingResponse": "Waiting for upstream response",
-            "responseStreaming": "Upstream responded; streaming is in progress"
+            "responseStreaming": "Upstream responded; streaming is in progress",
+ "thisRequestChannel": "This Request"
         }
     },
     "channel": {
