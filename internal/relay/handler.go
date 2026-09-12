@@ -78,6 +78,20 @@ func Forward(format llm.APIFormat) gin.HandlerFunc {
 		ctx := c.Request.Context()
 		failedItemID := 0 // 当前累计连续失败次数的成员 ID。
 		failures := 0     // 该成员包含首次请求的连续失败次数。
+		roundRobinTries := 0 // 轮询模式本请求已顺延的成员数, 达到成员总数说明一轮全败。
+
+		// retryAfterFailure 处理一次失败后的重试节奏: 轮询模式未转完一圈立即顺延,
+		// 整圈全败则等待重试间隔再开始; 其他模式等待重试间隔。返回 false 表示请求已取消。
+		retryAfterFailure := func() bool {
+			if group.Mode == model.GroupModeRoundRobin {
+				roundRobinTries++
+				if roundRobinTries < len(group.Items) {
+					return true
+				}
+				roundRobinTries = 0
+			}
+			return request.wait(ctx, group.RelayConfig.MemberRetryIntervalSeconds)
+		}
 
 		for {
 			if ctx.Err() != nil {
@@ -108,7 +122,7 @@ func Forward(format llm.APIFormat) gin.HandlerFunc {
 			// ChannelGrantGet 一次校验齐这几种情况, 取到的授权必然可直接转发, 无需再逐项检查。
 			grant, err := op.ChannelGrantGet(item.ChannelGrantID)
 			if err != nil {
-				if !request.wait(ctx, group.RelayConfig.MemberRetryIntervalSeconds) {
+				if !retryAfterFailure() {
 					return
 				}
 				continue
@@ -119,7 +133,7 @@ func Forward(format llm.APIFormat) gin.HandlerFunc {
 			// 成员指向的渠道已被删除时同样等待, 该成员可能很快被改回可用渠道。
 			channel, err := op.ChannelGet(channelModel.ChannelID)
 			if err != nil {
-				if !request.wait(ctx, group.RelayConfig.MemberRetryIntervalSeconds) {
+				if !retryAfterFailure() {
 					return
 				}
 				continue
@@ -220,11 +234,12 @@ func Forward(format llm.APIFormat) gin.HandlerFunc {
 					failedItemID = item.ID
 					failures = 1
 				}
-				// 达到总尝试次数时成员进入冷却并立即重新选路, 否则等待后重试。
-				if recordRouteFailure(group, item.ID, failures) {
+				// 轮询模式不做冷却, 其余模式达到总尝试次数时先冷却再重新选路。
+				if group.Mode != model.GroupModeRoundRobin && recordRouteFailure(group, item.ID, failures) {
 					continue
 				}
-				if !request.wait(ctx, group.RelayConfig.MemberRetryIntervalSeconds) {
+				// 未转完一圈的轮询模式立即顺延, 其余情况等待重试间隔。
+				if !retryAfterFailure() {
 					return
 				}
 				continue

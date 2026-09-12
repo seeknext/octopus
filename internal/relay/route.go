@@ -4,7 +4,6 @@ import (
 	"maps"
 	"math/rand"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/bestruirui/octopus/internal/model"
@@ -23,15 +22,15 @@ type RouteState struct {
 	Cooldowns     map[int]int64 `json:"cooldowns"`       // 失败成员 ID 对应的冷却截止 Unix 毫秒时间, 已到期的条目由前端按当前时间忽略。
 
 	affinityArmed bool // 当前路由下一次成功后是否开始亲和, 仅故障切换后为真。
+	rrCursor      int  // 轮询模式的下一次扫描起始下标, 选中成员后前移到下一个; 手动/故障转移模式不使用。
 }
 
 const routeStreamBuffer = 16 // 单个路由流连接的非阻塞消息缓冲容量。
 
 var (
-	roundRobinCounter uint64                     // roundRobinCounter 轮询模式的全局计数器。
-	routeMu           sync.Mutex                 // routeMu 保护全部分组路由状态。
-	routes            = make(map[int]*RouteState) // routes 按分组 ID 保存路由状态。
-	routeStreams       = make(map[chan RouteState]struct{}) // 全部路由 SSE 连接。
+	routeMu      sync.Mutex                           // routeMu 保护全部分组路由状态。
+	routes       = make(map[int]*RouteState)          // routes 按分组 ID 保存路由状态。
+	routeStreams = make(map[chan RouteState]struct{}) // 全部路由 SSE 连接。
 )
 
 // RouteStateOf 返回分组当前的实时路由状态, 供读取接口随分组一并返回。
@@ -79,7 +78,8 @@ func pickGroupItem(group model.Group) model.GroupItem {
 		return model.GroupItem{}
 	}
 
-	// 轮询模式：依次循环选择渠道，失败的渠道由调用方通过冷却机制跳过。
+	// 轮询模式: 按每分组独立游标顺序选择渠道, 无冷却与亲和。
+	// 第一次请求从列表第一项开始, 选中即游标前移; 渠道不可用由调用方发现并重新选路, 自然顺延到下一个成员。
 	if group.Mode == model.GroupModeRoundRobin {
 		if len(group.Items) == 0 {
 			return model.GroupItem{}
@@ -88,25 +88,20 @@ func pickGroupItem(group model.Group) model.GroupItem {
 		routeMu.Lock()
 		defer routeMu.Unlock()
 		route := groupRouteLocked(group)
-		now := time.Now().UnixMilli()
+		n := len(group.Items)
 
-		// 轮询遍历所有成员，跳过冷却中的成员。
-		for i := 0; i < len(group.Items); i++ {
-			idx := int(atomic.AddUint64(&roundRobinCounter, 1)) % len(group.Items)
-			item := group.Items[idx]
-			deadline, cooling := route.Cooldowns[item.ID]
-			if cooling && deadline > now {
-				continue
-			}
-			route.CurrentItemID = item.ID
-			publishRouteLocked(route)
-			return item
+		// 游标越界时回绕到列表头, 保证在成员集合变化后仍从有效位置开始。
+		if route.rrCursor >= n || route.rrCursor < 0 {
+			route.rrCursor = 0
 		}
-		// 所有成员都在冷却中，沿用当前成员。
-		if route.CurrentItemID != 0 {
-			return itemOf(group, route.CurrentItemID)
-		}
-		return model.GroupItem{}
+
+		// 取游标处成员并把游标移到下一项, 下一个请求从其后继续。
+		idx := route.rrCursor
+		route.rrCursor = (idx + 1) % n
+		item := group.Items[idx]
+		route.CurrentItemID = item.ID
+		publishRouteLocked(route)
+		return item
 	}
 
 	// 随机模式：每次随机选择一个渠道，失败的渠道由调用方通过冷却机制跳过。
@@ -185,7 +180,7 @@ func pickGroupItem(group model.Group) model.GroupItem {
 
 // recordRouteSuccess 上报一轮成功: 结束该成员的冷却与探测占用, 并在故障切换后按配置开始亲和。
 func recordRouteSuccess(group model.Group, itemID int) {
-	if group.Mode == model.GroupModeManual {
+	if group.Mode == model.GroupModeManual || group.Mode == model.GroupModeRoundRobin {
 		return
 	}
 
@@ -225,7 +220,7 @@ func recordRouteSuccess(group model.Group, itemID int) {
 // recordRouteFailure 上报一轮失败: 达到配置的总尝试次数后将该成员打入冷却并让出当前路由, 返回是否已冷却。
 // failures 为该成员在本请求内包含首次请求的连续失败次数, 由调用方累计。
 func recordRouteFailure(group model.Group, itemID, failures int) bool {
-	if group.Mode == model.GroupModeManual {
+	if group.Mode == model.GroupModeManual || group.Mode == model.GroupModeRoundRobin {
 		return false
 	}
 
