@@ -12,3 +12,7 @@ docker build --target export -o . .
 ```
 
 构建后当前目录生成 `octopus` 单文件二进制（已嵌入前端页面），运行 `./octopus start` 即可（数据存 `./data/`）。
+
+## 定制说明
+
+个人仓相对原仓的完整差异见 [CHANGES.md](CHANGES.md)：新增 Group `round_robin`（纯顺序轮询）/`random` 模式、日志详情按渠道高亮、Docker 多阶段构建。
